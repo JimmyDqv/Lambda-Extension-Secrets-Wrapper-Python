@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform: "AWS::Serverless-2016-10-31"
+Description: Example function using the secrets wrapper
+Parameters:
+  Environment:
+    Type: String
+    Description: Name of the Environment to load parameters for.
+    Default: dev
+  Application:
+    Type: String
+    Description: The name of the application to load parameters for.
+    Default: myapp
+  LambdaLayerArn:
+    Type: String
+    Description: The Amazon Resource Name for the Layer that contain the wrapper
+
+Resources:
+  CloudWatchLogsPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: !Sub ${Application}CloudWatch
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:*
+            Resource: "arn:aws:logs:*:*:*"
+      Roles:
+        - !Ref DemoFunctionRole
+
+  SSMPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: !Sub ${Application}SSM
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ssm:GetParameters
+            Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Environment}/${Application}/*"
+      Roles:
+        - !Ref DemoFunctionRole
+
+  DemoFunctionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+  DemoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: wrapper-demo
+      Runtime: python3.8
+      MemorySize: 256
+      Timeout: 10
+      CodeUri: ./lambda
+      Handler: demo.handler
+      Role: !GetAtt DemoFunctionRole.Arn
+      Environment:
+        Variables:
+          APP_ENV: !Ref Environment
+          APP_PARAMS_PATH: !Ref Application
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/secrets-wrapper/secrets-wrapper.py
